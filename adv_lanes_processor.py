@@ -1,18 +1,19 @@
-import cv2
-from moviepy.video.io.VideoFileClip import VideoFileClip
 import glob
-import matplotlib.image as mpimg
-from moviepy.editor import VideoFileClip
-import matplotlib.pyplot as plt
+
+import cv2
 import numpy as np
+from moviepy.editor import VideoFileClip
+
+
+# Static functions for image transformation, color spaces changes etc.
 
 
 def white_yellow_hls_mask(img):
     img_hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-    mask_yellow = cv2.inRange(img_hls, np.array([10, 123, 83]), np.array([35, 255, 203]))
-    mask_white = cv2.inRange(img_hls, np.array([0, 180, 0]), np.array([255, 255, 255]))
+    mask_yellow = cv2.inRange(img_hls, np.array([10, 0, 100]), np.array([40, 255, 255]))
+    mask_white = cv2.inRange(img_hls, np.array([0, 210, 0]), np.array([255, 255, 255]))
     combined_mask = cv2.bitwise_or(mask_white, mask_yellow)
-    return cv2.bitwise_and(img, img, mask=combined_mask)
+    return combined_mask
 
 
 def s_bin_channel(img):
@@ -31,16 +32,6 @@ def l_bin_channel(img):
     binary = np.zeros_like(L)
     binary[(L > thresh[0]) & (L <= thresh[1])] = 1
     return binary
-
-
-def combined_channels(img):
-    img_hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-    mask_yellow = cv2.inRange(img_hls, np.array([10, 0, 100]), np.array([40, 255, 255]))
-    mask_white = cv2.inRange(img_hls, np.array([0, 210, 0]), np.array([255, 255, 255]))
-    # mask_yellow = cv2.inRange(img_hls, np.array([10, 123, 83]), np.array([35, 255, 203]))
-    # mask_white = cv2.inRange(img_hls, np.array([0, 180, 0]), np.array([255, 255, 255]))
-    combined_mask = cv2.bitwise_or(mask_white, mask_yellow)
-    return combined_mask
 
 
 def sobel(img, sobel_kernel=5, thresh=(0.7, 1.3)):
@@ -69,8 +60,8 @@ def masked_sobel(img, sobel_kernel=5, thresh=(0.7, 1.3)):
 class LanesProcessor:
     def __init__(self, input_shape, kernel_size):
         self.input_shape = input_shape
-        self.src_points = np.float32([[568, 470], [722, 470], [218, 720], [1110, 720]])
-        self.dst_points = np.float32([[300, 0], [950, 0], [300, 720], [950, 720]])
+        self.src_points = np.float32([[568, 470], [722, 470], [218, 720], [1110, 720]]) # source points taken from straight lane image
+        self.dst_points = np.float32([[300, 0], [950, 0], [300, 720], [950, 720]])  # points mapped to warp image
         self.ksize = kernel_size  # kernel size for Sobel
         self.last_leftx = []
         self.last_lefty = []
@@ -80,7 +71,7 @@ class LanesProcessor:
         self.last_right_fit = []
         self.lanes_memory_size = 20
 
-        images = glob.glob('camera_cal/calibration*.jpg')
+        images = glob.glob('camera_cal/calibration*.jpg')  # loading images for camera calibration
 
         object_points = []
         image_points = []
@@ -132,7 +123,7 @@ class LanesProcessor:
         rightx_base = np.argmax(histogram[midpoint:]) + midpoint
 
         # HYPERPARAMETERS
-        # Choose the number of sliding windows
+        # Number of sliding windows
         nwindows = 9
         # Set the width of the windows +/- margin
         margin = 80
@@ -240,7 +231,7 @@ class LanesProcessor:
     def fit_polynomial(self, binary_warped):
         # Find our lane pixels first
         leftx, lefty, rightx, righty = self.find_lane_pixels(binary_warped) \
-             # if (len(self.left_fit) is 0 and len(self.right_fit) is 0) else self.search_around_poly(binary_warped)
+            # if (len(self.left_fit) is 0 and len(self.right_fit) is 0) else self.search_around_poly(binary_warped)
 
         self.left_fit = np.polyfit(lefty, leftx, 2)
         self.right_fit = np.polyfit(righty, rightx, 2)
@@ -264,13 +255,8 @@ class LanesProcessor:
             left_fitx = 1 * ploty ** 2 + 1 * ploty
             right_fitx = 1 * ploty ** 2 + 1 * ploty
 
-        ## Visualization ##
-        # Colors in the left and right lane regions
         binary_warped = np.dstack((binary_warped, binary_warped, binary_warped))
-        # Plots the left and right polynomials on the lane lines
-        # plt.plot(left_fitx, ploty, color='yellow')
-        # plt.plot(right_fitx, ploty, color='yellow')
-        # plt.fill_betweenx(ploty, left_fitx, right_fitx, facecolor='green', alpha=0.6)
+
         leftline = np.flip(np.dstack((left_fitx, ploty)), 1)
         rightline = np.dstack((right_fitx, ploty))
         lines = np.concatenate((leftline, rightline), axis=1)
@@ -279,7 +265,7 @@ class LanesProcessor:
 
     def measure_curvature(self, img):
         # Define conversions in x and y from pixels space to meters
-        ym_per_pix = 30 / 720  # meters per pixel in y dimension
+        ym_per_pix = 30 / self.input_shape[1]  # meters per pixel in y dimension
         mean_left_fit = np.mean(self.last_left_fit, axis=0)
         mean_right_fit = np.mean(self.last_right_fit, axis=0)
 
@@ -296,27 +282,28 @@ class LanesProcessor:
             mean_right_fit[0] * 2)  ## Implement the calculation of the right line here
 
         curvature_in_meters = 'Curvature {0:6.2f} m'.format((left_curverad + right_curverad) / 2)
-        cv2.putText(img, curvature_in_meters, (550, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), thickness=1, lineType=2)
+        cv2.putText(img, curvature_in_meters, (550, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), thickness=1,
+                    lineType=2)
         return img
 
     def offset_from_lane_centre(self, img):
         xm_per_pix = 3.7 / 650  # meters per pixel in x dimension
         mean_left_fit = np.mean(self.last_left_fit, axis=0)
         mean_right_fit = np.mean(self.last_right_fit, axis=0)
-        lane_center = 1280 / 2
-        left_lane_base = mean_left_fit[0] * 720 ** 2 + mean_left_fit[1] * 720 + mean_left_fit[2]
-        right_lane_base = mean_right_fit[0] * 720 ** 2 + mean_right_fit[1] * 720 + mean_right_fit[2]
+        lane_center = self.input_shape[0] / 2
+        left_lane_base = mean_left_fit[0] * self.input_shape[1] ** 2 + mean_left_fit[1] * self.input_shape[1] + mean_left_fit[2]
+        right_lane_base = mean_right_fit[0] * self.input_shape[1] ** 2 + mean_right_fit[1] * self.input_shape[1] + mean_right_fit[2]
         current_lane_center = (left_lane_base + right_lane_base) / 2
-        offset = 'Offset {0:3.2f} m'.format(abs(current_lane_center - lane_center) * xm_per_pix)
-        cv2.putText(img, offset, (550, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), thickness=1,
+        offset = current_lane_center - lane_center
+        offset_text = 'Distance from lane centre {0:3.2f}m to {1}'.format(abs(offset) * xm_per_pix,
+                                                                          'right' if offset < 0 else 'left')
+        cv2.putText(img, offset_text, (550, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), thickness=1,
                     lineType=2)
         return img
 
     def process_image(self, img):
         undistorted = cv2.undistort(img, self.mtx, self.dist, None, self.mtx)
-        # masked = s_channel(undistorted)
-        # sobeled = masked_sobel(masked)
-        masked = combined_channels(undistorted)
+        masked = white_yellow_hls_mask(undistorted)
         warped_img = self.warp(masked)
         poly = self.fit_polynomial(warped_img)
         unwarped = self.unwarp(poly)
@@ -326,7 +313,7 @@ class LanesProcessor:
         return with_offset
 
     def process_video(self, vid_path):
-        result = 'output_images/test.mp4'
+        result = 'output_images/poly.mp4'
         clip1 = VideoFileClip(vid_path)
         white_clip = clip1.fl_image(self.process_image)
         white_clip.write_videofile(result, audio=False)
