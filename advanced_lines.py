@@ -1,10 +1,9 @@
 import glob
+import sys
 
 import cv2
-import matplotlib.image as mpimg
-from moviepy.editor import VideoFileClip
-import matplotlib.pyplot as plt
 import numpy as np
+
 from adv_lanes_processor import LanesProcessor
 
 images_shape = (1280, 720)
@@ -203,8 +202,7 @@ def fit_polynomial(binary_warped):
 def process_image(img):
     undistorted = cv2.undistort(img, mtx, dist, None, mtx)
     masked = white_yellow_hls_mask(undistorted)
-    sobeled = sobel(masked)
-    warped_img = warped(sobeled)
+    warped_img = warped(masked)
     poly = fit_polynomial(warped_img)
     unwarp = unwarped(poly)
     final_image = cv2.addWeighted(img, 0.7, unwarp, 1., 0.)
@@ -212,27 +210,4 @@ def process_image(img):
 
 
 lanes_processor = LanesProcessor(images_shape, ksize)
-lanes_processor.process_video("project_video.mp4")
-# image = plt.imread('test_images/challenge_video_1.jpg')
-# undistorted = cv2.undistort(image, mtx, dist, None, mtx)
-# masked = white_yellow_hls_mask(undistorted)
-# masked = np.dstack((masked, masked, masked))
-# sobeled = sobel(masked)
-# # warp = warped(sobeled)
-# # poly_lines = fit_polynomial(warp)
-# plt.imshow(sobeled, cmap='gray')
-# plt.show()
-# result = 'output_images/test.mp4'
-# clip1 = VideoFileClip("challenge_video.mp4")
-# white_clip = clip1.fl_image(process_image)
-# white_clip.write_videofile(result, audio=False)
-
-# undistorted = cal_undistort(img, objpoints, imgpoints)
-#
-# f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
-# f.tight_layout()
-# ax1.imshow(img)
-# ax1.set_title('Original Image', fontsize=50)
-# ax2.imshow(undistorted)
-# ax2.set_title('Undistorted Image', fontsize=50)
-# plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+lanes_processor.process_video(sys.argv[1])
